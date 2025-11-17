@@ -34,10 +34,20 @@ We will develop a machine learning classifier in order to detect malicious activ
 ## Project Structure
 
 
-
 ## Installation
+```
+# Install EMBER
+pip install git+https://github.com/elastic/ember.git
 
+# Download EMBER dataset
+https://ember.elastic.co/ember_dataset_2018_2.tar.bz2
 
+# Patch EMBER features.py
+python patch_ember.py
+
+# Process EMBER dataset
+python process_ember.py
+```
 
 ## Usage
 
