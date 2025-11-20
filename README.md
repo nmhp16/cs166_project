@@ -51,7 +51,10 @@ python process_ember.py
 
 ## Usage
 
-
+```
+python train.py
+python predict.py
+```
 
 ## Performance Metrics
 

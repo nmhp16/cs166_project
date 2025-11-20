@@ -1,5 +1,9 @@
 
 
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+from compat_lief import patch_lief
+patch_lief()
 import ember
 import os
 import json

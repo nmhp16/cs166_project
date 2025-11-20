@@ -2,6 +2,10 @@ import argparse
 import os
 import json
 import time
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+from compat_lief import patch_lief
+patch_lief()
 import ember
 import lightgbm as lgb
 from sklearn.metrics import roc_auc_score, accuracy_score, precision_recall_fscore_support
