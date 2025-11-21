@@ -52,7 +52,12 @@ python process_ember.py
 ## Usage
 
 ```
+# Download infected file from VirusShare
+
+# Train
 python train.py
+
+# Predict
 python predict.py
 ```
 
@@ -68,5 +73,4 @@ python predict.py
 
 - [Cybercrime Cost Statistics](https://www.esentire.com/web-native-pages/cybercrime-to-cost-the-world-9-5-trillion-usd-annually-in-2024)
 - [VirusShare](https://virusshare.com/)
-- [VirusShare Search](https://github.com/AdamGreenhill/VirusShare-Search?tab=readme-ov-file)
 - [EMBER Dataset](https://github.com/elastic/ember)
