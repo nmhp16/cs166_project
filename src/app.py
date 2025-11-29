@@ -1,4 +1,4 @@
-"""Flask web application for malware detection."""
+"""Web interface for malware scanner."""
 
 import os
 import sys
@@ -14,7 +14,6 @@ from werkzeug.utils import secure_filename
 from detector import MalwareDetector
 from config import MAX_FILE_SIZE
 
-# Initialize app
 app = Flask(__name__,
             template_folder=os.path.join(os.path.dirname(__file__), 'templates'),
             static_folder=os.path.join(os.path.dirname(__file__), 'static'))
@@ -22,7 +21,6 @@ app = Flask(__name__,
 app.secret_key = os.urandom(24)
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 
-# Lazy load detector
 _detector = None
 
 def get_detector():

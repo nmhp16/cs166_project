@@ -1,7 +1,4 @@
-"""
-Malware Detection System
-A machine learning-based malware detection tool using EMBER features and LightGBM.
-"""
+"""Malware detection using EMBER features and LightGBM."""
 
 import os
 import sys
@@ -24,7 +21,6 @@ from config import (
 
 
 class MalwareDetector:
-    """Malware detector combining ML model with heuristic analysis."""
     
     def __init__(self, model_path=None, metrics_path=None):
         self.model_path = model_path or MODEL_PATH
@@ -33,7 +29,6 @@ class MalwareDetector:
         self.threshold = self._load_threshold()
     
     def _load_threshold(self):
-        """Load detection threshold from metrics file."""
         try:
             with open(self.metrics_path, 'r') as f:
                 return json.load(f).get('used_threshold', DEFAULT_THRESHOLD)
@@ -41,14 +36,12 @@ class MalwareDetector:
             return DEFAULT_THRESHOLD
     
     def _get_ml_score(self, data):
-        """Get ML prediction score using EMBER features."""
         try:
             return float(ember.predict_sample(self.model, data))
         except Exception:
             return None
     
     def _compute_hashes(self, data):
-        """Compute file hashes."""
         return {
             'md5': hashlib.md5(data).hexdigest(),
             'sha1': hashlib.sha1(data).hexdigest(),
@@ -56,7 +49,6 @@ class MalwareDetector:
         }
     
     def _analyze_pe(self, data):
-        """Analyze PE header for file type and packer detection."""
         info = {'is_pe': False, 'is_dotnet': False, 'is_packed': False, 'packer': None}
         
         if len(data) < 64 or data[:2] != b'MZ':
@@ -70,11 +62,9 @@ class MalwareDetector:
             info['is_pe'] = True
             data_lower = data.lower()
             
-            # Check for .NET
             if b'mscoree.dll' in data_lower or b'_corexemain' in data_lower:
                 info['is_dotnet'] = True
             
-            # Check for packers
             for sig, name in PACKER_SIGNATURES.items():
                 if sig in data:
                     info['is_packed'] = True
@@ -86,11 +76,9 @@ class MalwareDetector:
         return info
     
     def _check_pua_indicators(self, data):
-        """Check for PUA/adware indicators."""
         indicators = {'found': False, 'reasons': [], 'adjustment': 0.0}
         data_lower = data.lower()
         
-        # Check company names
         for company in SUSPICIOUS_COMPANIES:
             if company.encode() in data_lower:
                 indicators['found'] = True
@@ -98,7 +86,6 @@ class MalwareDetector:
                 indicators['adjustment'] += 0.2
                 break
         
-        # Check product names
         for product in SUSPICIOUS_PRODUCTS:
             if product.encode() in data_lower:
                 indicators['found'] = True
@@ -106,9 +93,7 @@ class MalwareDetector:
                 indicators['adjustment'] += 0.15
                 break
         
-        # Check for bundler frameworks
-        bundlers = [b'installcore', b'opencandy', b'amonetize', b'somoto']
-        for bundler in bundlers:
+        for bundler in [b'installcore', b'opencandy', b'amonetize', b'somoto']:
             if bundler in data_lower:
                 indicators['found'] = True
                 indicators['reasons'].append('Bundler framework detected')
@@ -119,7 +104,6 @@ class MalwareDetector:
         return indicators
     
     def _get_verdict(self, score, pua_found):
-        """Determine verdict based on score and indicators."""
         if score >= self.threshold:
             if pua_found:
                 return 'PUA', 'Potentially Unwanted Application'
@@ -129,7 +113,6 @@ class MalwareDetector:
         return 'CLEAN', 'No Threats Detected'
     
     def _get_confidence(self, score):
-        """Calculate confidence level."""
         margin = abs(score - self.threshold)
         if margin >= 0.3:
             return 'High'
@@ -138,29 +121,18 @@ class MalwareDetector:
         return 'Low'
     
     def analyze(self, file_path=None, data=None):
-        """
-        Analyze a file for malware.
-        
-        Args:
-            file_path: Path to file
-            data: Raw file bytes
-            
-        Returns:
-            dict: Analysis results
-        """
+        """Analyze file and return detection results."""
         if data is None:
             if file_path is None:
                 raise ValueError("Provide file_path or data")
             with open(file_path, 'rb') as f:
                 data = f.read()
         
-        # Get scores and analysis
         ml_score = self._get_ml_score(data)
         hashes = self._compute_hashes(data)
         pe_info = self._analyze_pe(data)
         pua = self._check_pua_indicators(data)
         
-        # Calculate final score
         base_score = ml_score if ml_score is not None else 0.5
         adjustment = pua['adjustment']
         if pe_info['is_dotnet'] and pua['found']:
@@ -189,7 +161,6 @@ class MalwareDetector:
 
 
 def main():
-    """CLI entry point."""
     import argparse
     
     parser = argparse.ArgumentParser(description='Malware Detection Tool')

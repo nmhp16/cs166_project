@@ -1,4 +1,4 @@
-"""Train the LightGBM malware detection model on EMBER dataset."""
+"""Train LightGBM model on EMBER dataset."""
 
 import os
 import sys
@@ -21,7 +21,6 @@ from config import EMBER_PATH, MODELS_DIR, MODEL_PATH
 
 
 def train_model():
-    """Train LightGBM model on EMBER features."""
     os.makedirs(MODELS_DIR, exist_ok=True)
     
     print("Loading EMBER features...")
@@ -36,18 +35,15 @@ def train_model():
     X_test, y_test = X_test[test_mask], y_test[test_mask]
     print(f"Labeled training: {X_train.shape[0]:,}, Labeled test: {X_test.shape[0]:,}")
     
-    # Split for validation
     X_tr, X_val, y_tr, y_val = train_test_split(
         X_train, y_train, test_size=0.1, random_state=42, stratify=y_train
     )
     
-    # Class balance
     pos_count = int(np.sum(y_tr == 1))
     neg_count = int(np.sum(y_tr == 0))
     scale_pos_weight = neg_count / pos_count if pos_count > 0 else 1.0
     print(f"Class ratio: {neg_count:,} benign / {pos_count:,} malware")
     
-    # LightGBM parameters optimized for malware detection
     params = {
         'objective': 'binary',
         'metric': 'auc',
@@ -86,33 +82,24 @@ def train_model():
     print(f"Training completed in {time.time() - start:.1f}s")
     print(f"Best iteration: {model.best_iteration}")
     
-    # Evaluate
     probs = model.predict(X_test)
     auc = roc_auc_score(y_test, probs)
     
-    # Find optimal threshold using F1 score
     precisions, recalls, thresholds = precision_recall_curve(y_test, probs)
     f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-8)
     
-    # Best F1 threshold
     best_f1_idx = np.argmax(f1_scores)
     optimal_thresh = float(thresholds[best_f1_idx])
     
-    # Find threshold for 95%+ recall while maintaining reasonable precision
-    # Sort by threshold descending to find highest threshold with 95% recall
+    # Find threshold with 95%+ recall and 70%+ precision
     high_recall_thresh = None
     for i in range(len(thresholds) - 1, -1, -1):
         if recalls[i] >= 0.95 and precisions[i] >= 0.7:  # At least 70% precision
             high_recall_thresh = float(thresholds[i])
             break
     
-    # Use optimal F1 threshold, or high-recall if it has good precision
-    if high_recall_thresh and high_recall_thresh > 0.1:
-        final_thresh = high_recall_thresh
-    else:
-        final_thresh = optimal_thresh
+    final_thresh = high_recall_thresh if (high_recall_thresh and high_recall_thresh > 0.1) else optimal_thresh
     
-    # Sanity check - threshold should be reasonable
     if final_thresh < 0.1 or final_thresh > 0.9:
         final_thresh = 0.5  # Fallback to default
         print(f"Warning: Using default threshold 0.5 (computed was {optimal_thresh:.4f})")
@@ -131,11 +118,9 @@ def train_model():
     print(f"F1:        {f1:.4f}")
     print(f"Threshold: {final_thresh:.4f}")
     
-    # Save model
     model.save_model(MODEL_PATH)
     print(f"\nModel saved to: {MODEL_PATH}")
     
-    # Save metrics
     metrics = {
         'auc': float(auc),
         'accuracy': float(acc),
