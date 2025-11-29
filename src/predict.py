@@ -43,7 +43,8 @@ def main():
     
     BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     DEFAULT_MODEL = os.path.join(BASE, 'models', 'ember_lgbm.txt')
-    DEFAULT_SAMPLE = os.path.join(BASE, '85e229c6e469d9092e4241f9a56c3d3dec8a5da443caf4727f5bfceb14f1e3c8')
+    # DEFAULT_SAMPLE = os.path.join(BASE, '85e229c6e469d9092e4241f9a56c3d3dec8a5da443caf4727f5bfceb14f1e3c8')
+    DEFAULT_SAMPLE = os.path.join(BASE, 'fc457d54e133425d72fcfb6c71ec2dff181f0d7ea8c2c2011738a7d696b2500f')
     DEFAULT_METRICS = os.path.join(BASE, 'models', 'ember_lgbm_metrics.json')
 
     model_file = args.model or DEFAULT_MODEL
