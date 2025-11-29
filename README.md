@@ -54,11 +54,14 @@ python process_ember.py
 ```
 # Download infected file from VirusShare
 
-# Train
-python train.py
+# Run web app
+python src/app.py
 
-# Predict
-python predict.py
+# Train model
+python src/train.py
+
+# CLI scan
+python src/detector.py path/to/file.exe
 ```
 
 ## Performance Metrics

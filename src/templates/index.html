@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" id="uploadForm">
+        <div class="upload-area" id="dropZone">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <h3>Drop file here or click to browse</h3>
+            <p>Supports PE files (EXE, DLL) up to 100 MB</p>
+        </div>
+        
+        <input type="file" name="file" id="fileInput" class="file-input" accept=".exe,.dll,.sys,.scr">
+        
+        <div class="file-preview" id="filePreview">
+            <div class="file-info">
+                <div class="file-name" id="fileName"></div>
+                <div class="file-size" id="fileSize"></div>
+            </div>
+            <button type="button" class="btn btn-remove" onclick="clearFile()">✕</button>
+        </div>
+        
+        <button type="submit" class="btn btn-primary" id="submitBtn" disabled>Scan File</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const filePreview = document.getElementById('filePreview');
+const fileName = document.getElementById('fileName');
+const fileSize = document.getElementById('fileSize');
+const submitBtn = document.getElementById('submitBtn');
+const uploadForm = document.getElementById('uploadForm');
+const loading = document.getElementById('loading');
+
+dropZone.onclick = () => fileInput.click();
+
+['dragenter', 'dragover'].forEach(e => {
+    dropZone.addEventListener(e, (ev) => {
+        ev.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+});
+
+['dragleave', 'drop'].forEach(e => {
+    dropZone.addEventListener(e, (ev) => {
+        ev.preventDefault();
+        dropZone.classList.remove('dragover');
+    });
+});
+
+dropZone.addEventListener('drop', (e) => {
+    if (e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files;
+        showFile(e.dataTransfer.files[0]);
+    }
+});
+
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) showFile(e.target.files[0]);
+});
+
+function showFile(file) {
+    fileName.textContent = file.name;
+    fileSize.textContent = formatSize(file.size);
+    filePreview.classList.add('active');
+    dropZone.style.display = 'none';
+    submitBtn.disabled = false;
+}
+
+function clearFile() {
+    fileInput.value = '';
+    filePreview.classList.remove('active');
+    dropZone.style.display = 'block';
+    submitBtn.disabled = true;
+}
+
+function formatSize(bytes) {
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let i = 0;
+    while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+    return bytes.toFixed(1) + ' ' + units[i];
+}
+
+uploadForm.onsubmit = () => loading.classList.add('active');
+</script>
+{% endblock %}

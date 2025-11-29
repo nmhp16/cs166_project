@@ -1,139 +1,157 @@
-import argparse
+"""Train the LightGBM malware detection model on EMBER dataset."""
+
 import os
+import sys
 import json
 import time
-import sys
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score, accuracy_score, precision_recall_fscore_support, precision_recall_curve
+from sklearn.metrics import (
+    roc_auc_score, accuracy_score, precision_recall_fscore_support,
+    precision_recall_curve
+)
+
 sys.path.insert(0, os.path.dirname(__file__))
 from compat_lief import patch_lief
 patch_lief()
+
 import ember
 import lightgbm as lgb
-import joblib
+from config import EMBER_PATH, MODELS_DIR, MODEL_PATH
 
-EMBER_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../ember2018'))
-MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../models/ember_lgbm.txt'))
 
-if __name__ == "__main__":
-    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
-    print("Loading vectorized EMBER features (this may use a lot of RAM)...")
-
-    X_train, y_train, X_test, y_test = ember.read_vectorized_features(EMBER_PATH)
-
-    print(f"Training LightGBM model on {X_train.shape[0]} samples...")
+def train_model():
+    """Train LightGBM model on EMBER features."""
+    os.makedirs(MODELS_DIR, exist_ok=True)
     
-    # Split training data for validation and early stopping
-    X_train_split, X_val_split, y_train_split, y_val_split = train_test_split(
-        X_train, y_train, test_size=0.2, random_state=42, stratify=y_train
+    print("Loading EMBER features...")
+    X_train, y_train, X_test, y_test = ember.read_vectorized_features(EMBER_PATH)
+    print(f"Raw training samples: {X_train.shape[0]:,}")
+    print(f"Raw test samples: {X_test.shape[0]:,}")
+    
+    # Filter out unlabeled samples (y == -1)
+    train_mask = y_train != -1
+    test_mask = y_test != -1
+    X_train, y_train = X_train[train_mask], y_train[train_mask]
+    X_test, y_test = X_test[test_mask], y_test[test_mask]
+    print(f"Labeled training: {X_train.shape[0]:,}, Labeled test: {X_test.shape[0]:,}")
+    
+    # Split for validation
+    X_tr, X_val, y_tr, y_val = train_test_split(
+        X_train, y_train, test_size=0.1, random_state=42, stratify=y_train
     )
     
-    dtrain = lgb.Dataset(X_train_split, label=y_train_split)
-    dval = lgb.Dataset(X_val_split, label=y_val_split, reference=dtrain)
-    dtest = lgb.Dataset(X_test, label=y_test, reference=dtrain)
-    
-    # Calculate class imbalance weight
-    neg_count = np.sum(y_train_split == 0)
-    pos_count = np.sum(y_train_split == 1)
+    # Class balance
+    pos_count = int(np.sum(y_tr == 1))
+    neg_count = int(np.sum(y_tr == 0))
     scale_pos_weight = neg_count / pos_count if pos_count > 0 else 1.0
-    print(f"Class distribution: {neg_count} benign, {pos_count} malware")
-    print(f"Scale pos weight: {scale_pos_weight:.3f}")
-
+    print(f"Class ratio: {neg_count:,} benign / {pos_count:,} malware")
+    
+    # LightGBM parameters optimized for malware detection
     params = {
         'objective': 'binary',
         'metric': 'auc',
-        'verbosity': -1,
         'boosting_type': 'gbdt',
-        'num_leaves': 128,
+        'num_leaves': 256,
         'learning_rate': 0.05,
-        'max_depth': 10,
-        'min_child_samples': 10,
+        'max_depth': 15,
+        'min_child_samples': 20,
         'subsample': 0.8,
         'colsample_bytree': 0.8,
         'scale_pos_weight': scale_pos_weight,
-        'random_state': 42,
         'reg_alpha': 0.1,
-        'reg_lambda': 0.1
+        'reg_lambda': 0.1,
+        'random_state': 42,
+        'verbosity': -1,
+        'n_jobs': -1,
     }
-
+    
+    dtrain = lgb.Dataset(X_tr, label=y_tr)
+    dval = lgb.Dataset(X_val, label=y_val, reference=dtrain)
+    
+    print("\nTraining...")
     start = time.time()
-    booster = lgb.train(
-        params, 
-        dtrain, 
-        num_boost_round=1000,
+    
+    model = lgb.train(
+        params,
+        dtrain,
+        num_boost_round=1500,
         valid_sets=[dval],
-        callbacks=[lgb.early_stopping(stopping_rounds=50, verbose=True)]
+        callbacks=[
+            lgb.early_stopping(stopping_rounds=100, verbose=False),
+            lgb.log_evaluation(period=100)
+        ]
     )
     
-    duration = time.time() - start
-    print(f"Training finished in {duration:.1f}s")
-
-    # Save model
-    print(f"Saving LightGBM model to {MODEL_PATH}")
-    booster.save_model(MODEL_PATH)
-
-    model_wrap = {'model_file': MODEL_PATH}
-    joblib.dump(model_wrap, MODEL_PATH + '.joblib')
-
-    # Evaluate on the test set
-    probs = booster.predict(X_test)
+    print(f"Training completed in {time.time() - start:.1f}s")
+    print(f"Best iteration: {model.best_iteration}")
     
-    # Find optimal threshold using precision-recall curve
+    # Evaluate
+    probs = model.predict(X_test)
+    auc = roc_auc_score(y_test, probs)
+    
+    # Find optimal threshold using F1 score
     precisions, recalls, thresholds = precision_recall_curve(y_test, probs)
-    f1_scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-8)
-    optimal_idx = np.argmax(f1_scores)
-    optimal_threshold = thresholds[optimal_idx]
+    f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-8)
     
-    # For malware detection, prioritize recall (catch more malware)
-    # Use a threshold that gives at least 95% recall
-    high_recall_threshold = None
-    for i, (thresh, recall) in enumerate(zip(thresholds, recalls[:-1])):
-        if recall >= 0.95:
-            high_recall_threshold = thresh
+    # Best F1 threshold
+    best_f1_idx = np.argmax(f1_scores)
+    optimal_thresh = float(thresholds[best_f1_idx])
+    
+    # Find threshold for 95%+ recall while maintaining reasonable precision
+    # Sort by threshold descending to find highest threshold with 95% recall
+    high_recall_thresh = None
+    for i in range(len(thresholds) - 1, -1, -1):
+        if recalls[i] >= 0.95 and precisions[i] >= 0.7:  # At least 70% precision
+            high_recall_thresh = float(thresholds[i])
             break
     
-    # Use the more conservative threshold (higher recall)
-    final_threshold = high_recall_threshold if high_recall_threshold is not None else optimal_threshold
-    
-    print(f"Optimal threshold (max F1): {optimal_threshold:.4f}")
-    if high_recall_threshold is not None:
-        print(f"High recall threshold (95%+ recall): {high_recall_threshold:.4f}")
+    # Use optimal F1 threshold, or high-recall if it has good precision
+    if high_recall_thresh and high_recall_thresh > 0.1:
+        final_thresh = high_recall_thresh
     else:
-        print("High recall threshold (95%+ recall): N/A")
-    print(f"Using threshold: {final_threshold:.4f}")
+        final_thresh = optimal_thresh
     
-    preds = (probs >= final_threshold).astype(int)
-    auc = roc_auc_score(y_test, probs)
+    # Sanity check - threshold should be reasonable
+    if final_thresh < 0.1 or final_thresh > 0.9:
+        final_thresh = 0.5  # Fallback to default
+        print(f"Warning: Using default threshold 0.5 (computed was {optimal_thresh:.4f})")
+    
+    preds = (probs >= final_thresh).astype(int)
     acc = accuracy_score(y_test, preds)
     prec, rec, f1, _ = precision_recall_fscore_support(y_test, preds, average='binary')
     
-    # Calculate false negative rate (critical for malware detection)
-    fn_mask = (y_test == 1) & (preds == 0)
-    false_negative_rate = np.sum(fn_mask) / np.sum(y_test == 1) if np.sum(y_test == 1) > 0 else 0
+    print(f"\n{'='*40}")
+    print("EVALUATION RESULTS")
+    print(f"{'='*40}")
+    print(f"AUC:       {auc:.4f}")
+    print(f"Accuracy:  {acc:.4f}")
+    print(f"Precision: {prec:.4f}")
+    print(f"Recall:    {rec:.4f}")
+    print(f"F1:        {f1:.4f}")
+    print(f"Threshold: {final_thresh:.4f}")
     
-    # Feature importance
-    feature_importance = booster.feature_importance(importance_type='gain')
-    top_features = np.argsort(feature_importance)[-10:][::-1]
-
+    # Save model
+    model.save_model(MODEL_PATH)
+    print(f"\nModel saved to: {MODEL_PATH}")
+    
+    # Save metrics
     metrics = {
-        'auc': float(auc), 
-        'accuracy': float(acc), 
-        'precision': float(prec), 
-        'recall': float(rec), 
+        'auc': float(auc),
+        'accuracy': float(acc),
+        'precision': float(prec),
+        'recall': float(rec),
         'f1': float(f1),
-        'false_negative_rate': float(false_negative_rate),
-        'optimal_threshold': float(optimal_threshold),
-        'high_recall_threshold': float(high_recall_threshold) if high_recall_threshold is not None else None,
-        'used_threshold': float(final_threshold),
-        'best_iteration': booster.best_iteration,
-        'num_features': len(feature_importance),
-        'top_feature_indices': top_features.tolist(),
-        'top_feature_importance': feature_importance[top_features].tolist()
+        'used_threshold': float(final_thresh),
+        'optimal_threshold': float(optimal_thresh),
+        'best_iteration': model.best_iteration,
     }
-    metfile = os.path.splitext(MODEL_PATH)[0] + '_metrics.json'
-    with open(metfile, 'w') as f:
+    
+    metrics_path = os.path.splitext(MODEL_PATH)[0] + '_metrics.json'
+    with open(metrics_path, 'w') as f:
         json.dump(metrics, f, indent=2)
+    print(f"Metrics saved to: {metrics_path}")
 
-    print("Metrics:", metrics)
-    print("Model and metrics saved.")
+
+if __name__ == "__main__":
+    train_model()

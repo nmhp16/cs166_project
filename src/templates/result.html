@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Scan Result{% endblock %}
+
+{% block content %}
+<!-- Verdict -->
+<div class="verdict verdict-{{ result.verdict_short|lower }}">
+    <h2>{{ result.verdict }}</h2>
+    <p>{{ result.confidence }} confidence</p>
+</div>
+
+<!-- File Info -->
+<div class="card">
+    <div class="info-grid">
+        <div class="info-item">
+            <div class="info-label">Filename</div>
+            <div class="info-value">{{ result.filename }}</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Size</div>
+            <div class="info-value">{{ "{:,}".format(result.file_size) }} bytes</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Type</div>
+            <div class="info-value">
+                {% if result.pe_info.is_dotnet %}.NET Assembly
+                {% elif result.pe_info.is_pe %}PE Executable
+                {% else %}Unknown{% endif %}
+                {% if result.pe_info.is_packed %}(Packed){% endif %}
+            </div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Scanned</div>
+            <div class="info-value">{{ result.timestamp }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Scores -->
+<div class="card">
+    <div class="info-grid">
+        <div class="info-item">
+            <div class="info-label">ML Score</div>
+            <div class="info-value">{{ "%.4f"|format(result.ml_score) if result.ml_score else 'N/A' }}</div>
+            {% if result.ml_score %}
+            <div class="score-bar">
+                <div class="score-fill {% if result.ml_score < 0.3 %}score-low{% elif result.ml_score < 0.6 %}score-medium{% else %}score-high{% endif %}" 
+                     style="width: {{ (result.ml_score * 100)|int }}%"></div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="info-item">
+            <div class="info-label">Final Score</div>
+            <div class="info-value">{{ "%.4f"|format(result.final_score) }}</div>
+            <div class="score-bar">
+                <div class="score-fill {% if result.final_score < 0.3 %}score-low{% elif result.final_score < 0.6 %}score-medium{% else %}score-high{% endif %}" 
+                     style="width: {{ (result.final_score * 100)|int }}%"></div>
+            </div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Threshold</div>
+            <div class="info-value">{{ "%.4f"|format(result.threshold) }}</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Heuristic Adj.</div>
+            <div class="info-value">+{{ "%.4f"|format(result.adjustment) }}</div>
+        </div>
+    </div>
+    
+    {% if result.reasons %}
+    <div class="reasons">
+        <div class="info-label">Detection Reasons</div>
+        {% for reason in result.reasons %}
+        <span class="reason-tag">{{ reason }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Hashes -->
+<div class="card">
+    <div class="info-label" style="margin-bottom: 1rem;">File Hashes</div>
+    <div style="margin-bottom: 0.75rem;">
+        <div class="info-label">MD5</div>
+        <div class="hash-value">{{ result.hashes.md5 }}</div>
+    </div>
+    <div style="margin-bottom: 0.75rem;">
+        <div class="info-label">SHA1</div>
+        <div class="hash-value">{{ result.hashes.sha1 }}</div>
+    </div>
+    <div>
+        <div class="info-label">SHA256</div>
+        <div class="hash-value">{{ result.hashes.sha256 }}</div>
+    </div>
+</div>
+
+<a href="{{ url_for('index') }}" class="btn btn-secondary" style="display: block; text-align: center;">
+    Scan Another File
+</a>
+{% endblock %}
